@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "unity.h"
 
 #include "imu_convert.h"
@@ -32,10 +34,14 @@ TEST_CASE("be16 combines bytes as signed big-endian", "[imu_convert]")
     TEST_ASSERT_EQUAL_INT16(-32768, imu_be16_to_i16(0x80, 0x00));
 }
 
-/* ESP-IDF Linux-target entry point: run every registered TEST_CASE. */
+/* ESP-IDF Linux-target entry point: run every registered TEST_CASE and
+ * terminate the process with a definitive exit code. Without the explicit
+ * exit(), returning from app_main leaves the linux-target process alive and
+ * the CI step hangs until the job timeout. */
 void app_main(void)
 {
     UNITY_BEGIN();
     unity_run_all_tests();
-    UNITY_END();
+    int failures = UNITY_END();
+    exit(failures == 0 ? 0 : 1);
 }
