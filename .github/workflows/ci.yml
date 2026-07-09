@@ -1,0 +1,54 @@
+# CI for esp32-imu-bridge — firmware build (esp32s3) + host unit tests (Linux target).
+# Uses the official ESP-IDF v6.0 image so no local toolchain/hardware is needed.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-firmware:
+    name: Build firmware (esp32s3)
+    runs-on: ubuntu-24.04
+    container: espressif/idf:release-v6.0
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: idf.py build
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py set-target esp32s3
+          idf.py build
+
+  host-test:
+    name: Unit tests (Unity on Linux target)
+    runs-on: ubuntu-24.04
+    container: espressif/idf:release-v6.0
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + run host tests
+        shell: bash
+        working-directory: host_test
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py --preview set-target linux
+          idf.py build
+          bin="$(find build -maxdepth 1 -type f -name '*.elf' | head -1)"
+          if [ -z "$bin" ]; then
+            bin="$(find build -maxdepth 1 -type f -perm -u+x ! -name '*.map' | head -1)"
+          fi
+          echo "running $bin"
+          out="$("$bin" 2>&1)"
+          echo "$out"
+          echo "$out" | grep -Eq '^OK$' || { echo '::error::Unity reported failures'; exit 1; }
